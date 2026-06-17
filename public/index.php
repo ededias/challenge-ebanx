@@ -15,7 +15,7 @@ use Ebanx\Service\AccountService;
 
 require __DIR__ . '/../vendor/autoload.php';
 
-$storePath = getenv('EBANX_STORE_PATH') ?: sys_get_temp_dir() . '/ebanx-accounts.json';
+$storePath = getenv('EBANX_STORE_PATH') ?: __DIR__ . '/../data/accounts.json';
 
 $controller = new Controller(
     new AccountService(

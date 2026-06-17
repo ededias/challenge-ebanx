@@ -47,7 +47,11 @@ final class FileAccountRepository implements AccountRepository
      */
     private function read(): array
     {
-        $handle = @fopen($this->path, 'r');
+        if (!is_file($this->path)) {
+            return [];
+        }
+
+        $handle = fopen($this->path, 'r');
         if ($handle === false) {
             return [];
         }
@@ -71,6 +75,11 @@ final class FileAccountRepository implements AccountRepository
      */
     private function mutate(callable $change): void
     {
+        $dir = \dirname($this->path);
+        if (!is_dir($dir) && !mkdir($dir, 0775, true) && !is_dir($dir)) {
+            throw new \RuntimeException("Unable to create account store directory at {$dir}");
+        }
+
         $handle = fopen($this->path, 'c+');
         if ($handle === false) {
             throw new \RuntimeException("Unable to open account store at {$this->path}");
