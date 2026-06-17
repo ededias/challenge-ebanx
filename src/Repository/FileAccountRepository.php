@@ -29,17 +29,52 @@ final class FileAccountRepository implements AccountRepository
         return $this->read()[$id] ?? null;
     }
 
-    public function save(string $id, int $balance): void
+    /**
+     * Run $apply against the current state under an exclusive lock and persist
+     * the result. The lock spans the whole read-modify-write, so concurrent
+     * requests cannot clobber each other and a multi-account change (a transfer)
+     * is all-or-nothing. If $apply throws, the file is left untouched.
+     *
+     * @template T
+     * @param callable(array<string, int> &): T $apply
+     * @return T
+     */
+    public function transaction(callable $apply): mixed
     {
-        $this->mutate(static function (array $state) use ($id, $balance): array {
-            $state[$id] = $balance;
-            return $state;
-        });
+        $dir = \dirname($this->path);
+        if (!is_dir($dir) && !mkdir($dir, 0775, true) && !is_dir($dir)) {
+            throw new \RuntimeException("Unable to create account store directory at {$dir}");
+        }
+
+        $handle = fopen($this->path, 'c+');
+        if ($handle === false) {
+            throw new \RuntimeException("Unable to open account store at {$this->path}");
+        }
+
+        try {
+            flock($handle, LOCK_EX);
+            $state = $this->decode(stream_get_contents($handle) ?: '');
+
+            // Mutates $state by reference; an exception here skips the write below.
+            $result = $apply($state);
+
+            rewind($handle);
+            ftruncate($handle, 0);
+            fwrite($handle, json_encode($state, JSON_THROW_ON_ERROR));
+            fflush($handle);
+
+            return $result;
+        } finally {
+            flock($handle, LOCK_UN);
+            fclose($handle);
+        }
     }
 
     public function reset(): void
     {
-        $this->mutate(static fn (): array => []);
+        $this->transaction(static function (array &$state): void {
+            $state = [];
+        });
     }
 
     /**
@@ -65,38 +100,6 @@ final class FileAccountRepository implements AccountRepository
         }
 
         return $state;
-    }
-
-    /**
-     * Apply $change to the current state under an exclusive lock so concurrent
-     * requests cannot clobber each other.
-     *
-     * @param callable(array<string, int>): array<string, int> $change
-     */
-    private function mutate(callable $change): void
-    {
-        $dir = \dirname($this->path);
-        if (!is_dir($dir) && !mkdir($dir, 0775, true) && !is_dir($dir)) {
-            throw new \RuntimeException("Unable to create account store directory at {$dir}");
-        }
-
-        $handle = fopen($this->path, 'c+');
-        if ($handle === false) {
-            throw new \RuntimeException("Unable to open account store at {$this->path}");
-        }
-
-        try {
-            flock($handle, LOCK_EX);
-            $state = $change($this->decode(stream_get_contents($handle) ?: ''));
-
-            rewind($handle);
-            ftruncate($handle, 0);
-            fwrite($handle, json_encode($state, JSON_THROW_ON_ERROR));
-            fflush($handle);
-        } finally {
-            flock($handle, LOCK_UN);
-            fclose($handle);
-        }
     }
 
     /**

@@ -9,7 +9,8 @@ namespace Ebanx\Repository;
  *
  * This is the canonical reference implementation of the contract and the one
  * the unit tests exercise directly (no mocks): state lives for the lifetime of
- * the object, which is exactly one test case.
+ * the object, which is exactly one test case. A single-threaded array is
+ * already atomic, so `transaction()` just hands the array to the callback.
  */
 final class InMemoryAccountRepository implements AccountRepository
 {
@@ -21,9 +22,9 @@ final class InMemoryAccountRepository implements AccountRepository
         return $this->balances[$id] ?? null;
     }
 
-    public function save(string $id, int $balance): void
+    public function transaction(callable $apply): mixed
     {
-        $this->balances[$id] = $balance;
+        return $apply($this->balances);
     }
 
     public function reset(): void
