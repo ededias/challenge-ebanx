@@ -1,0 +1,29 @@
+{
+    "name": "ededias/ebanx-banking-api",
+    "description": "In-memory banking accounts API for the EBANX technical challenge",
+    "type": "project",
+    "license": "MIT",
+    "require": {
+        "php": ">=8.2"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^11.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "Ebanx\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Ebanx\\Tests\\": "tests/"
+        }
+    },
+    "scripts": {
+        "test": "phpunit",
+        "serve": "php -S 0.0.0.0:8080 public/index.php"
+    },
+    "config": {
+        "sort-packages": true
+    }
+}
