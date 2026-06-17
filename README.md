@@ -42,7 +42,7 @@ Http\Controller             ← maps routes to the service, owns spec quirks
 Service\AccountService      ← the whole banking domain, returns plain data
     │                         or throws AccountNotFoundException
     ▼
-Repository\AccountRepository  ← tiny storage contract: find / save / reset
+Repository\AccountRepository  ← tiny storage contract: find / transaction / reset
     ├── InMemoryAccountRepository   (used by the unit tests, no mocks)
     └── FileAccountRepository       (used by the running server)
 ```
@@ -64,9 +64,33 @@ hidden behind `AccountRepository`, so the domain never knows it exists.
   the rules trivial to unit test against a real repository (no mocks).
 - **`Response` value object.** A transport-agnostic status + body, so the
   controller can be tested without touching PHP's global output machinery.
+- **Atomic mutations.** The only way to change state is
+  `AccountRepository::transaction()`, which performs the read, the decision and
+  the write as a single unit under one exclusive lock. A transfer therefore
+  debits the origin and credits the destination with no window where the two are
+  out of sync, and a rejected operation persists nothing. This also closes the
+  read-then-write (lost-update) race a separate `find()` + `save()` would leave
+  open.
 - **No `@` error suppression.** Failure paths are handled explicitly
   (`is_file` before `fopen`, an explicit `is_dir`/`mkdir` guard) so real errors
   surface instead of being silently swallowed.
+
+## Behaviour beyond the spec
+
+The contract table covers the cases the challenge specifies. Two situations it
+is silent about, and the deliberate choices made for them:
+
+- **Insufficient funds (`withdraw` / `transfer` that would go negative).**
+  Rejected with **`404 0`** — the same response the spec uses for an unknown
+  account — and **no state changes**. Rationale: the spec only ever answers a
+  request it cannot fulfil on an account with `404 0`, so an existing account
+  that cannot cover the amount is collapsed into that same "operation rejected"
+  signal rather than inventing a new status code. Withdrawing down to exactly
+  `0` is allowed (it is not negative). See `InsufficientFundsException`.
+- **Invalid `amount` (negative or zero).** Intentionally **out of scope**: the
+  spec only uses positive integers and asks not to anticipate. `amount` is
+  assumed positive; no extra validation is added. (A negative amount would let a
+  "deposit" reduce a balance — a known, accepted limitation given the spec.)
 
 ## Project structure
 
