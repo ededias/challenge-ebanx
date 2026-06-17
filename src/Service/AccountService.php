@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Ebanx\Service;
 
 use Ebanx\Exception\AccountNotFoundException;
+use Ebanx\Exception\InsufficientFundsException;
 use Ebanx\Repository\AccountRepository;
 
 /**
@@ -64,6 +65,7 @@ final class AccountService
      *
      * @return array{origin: array{id: string, balance: int}}
      * @throws AccountNotFoundException when the origin account does not exist.
+     * @throws InsufficientFundsException when the debit would go negative.
      */
     public function withdraw(string $origin, int $amount): array
     {
@@ -73,6 +75,9 @@ final class AccountService
             }
 
             $balance = $state[$origin] - $amount;
+            if ($balance < 0) {
+                throw new InsufficientFundsException($origin);
+            }
             $state[$origin] = $balance;
 
             return ['origin' => ['id' => $origin, 'balance' => $balance]];
@@ -86,6 +91,7 @@ final class AccountService
      *
      * @return array{origin: array{id: string, balance: int}, destination: array{id: string, balance: int}}
      * @throws AccountNotFoundException when the origin account does not exist.
+     * @throws InsufficientFundsException when the origin cannot cover the amount.
      */
     public function transfer(string $origin, string $destination, int $amount): array
     {
@@ -95,6 +101,9 @@ final class AccountService
             }
 
             $originBalance = $state[$origin] - $amount;
+            if ($originBalance < 0) {
+                throw new InsufficientFundsException($origin);
+            }
             $destinationBalance = ($state[$destination] ?? 0) + $amount;
 
             $state[$origin] = $originBalance;

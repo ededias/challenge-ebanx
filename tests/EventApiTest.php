@@ -116,6 +116,32 @@ final class EventApiTest extends TestCase
     }
 
     #[Test]
+    public function withdraw_more_than_the_balance_is_404_bare_zero(): void
+    {
+        $this->event(['type' => 'deposit', 'destination' => '100', 'amount' => 10]);
+
+        self::assertSame(
+            [404, '0'],
+            $this->event(['type' => 'withdraw', 'origin' => '100', 'amount' => 20]),
+        );
+        // The rejected withdraw must not have touched the balance.
+        self::assertSame([200, '10'], $this->balance('100'));
+    }
+
+    #[Test]
+    public function transfer_more_than_the_balance_is_404_and_leaves_state_untouched(): void
+    {
+        $this->event(['type' => 'deposit', 'destination' => '100', 'amount' => 10]);
+
+        self::assertSame(
+            [404, '0'],
+            $this->event(['type' => 'transfer', 'origin' => '100', 'destination' => '300', 'amount' => 20]),
+        );
+        self::assertSame([200, '10'], $this->balance('100'));   // origin untouched
+        self::assertSame([404, '0'], $this->balance('300'));    // destination never created
+    }
+
+    #[Test]
     public function transfer_is_201_with_origin_and_destination(): void
     {
         $this->event(['type' => 'deposit', 'destination' => '100', 'amount' => 15]);

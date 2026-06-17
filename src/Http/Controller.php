@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Ebanx\Http;
 
 use Ebanx\Exception\AccountNotFoundException;
+use Ebanx\Exception\InsufficientFundsException;
 use Ebanx\Service\AccountService;
 
 /**
@@ -93,7 +94,9 @@ final class Controller
                 ),
                 default => Response::json(422, self::NOT_FOUND),
             };
-        } catch (AccountNotFoundException) {
+        } catch (AccountNotFoundException | InsufficientFundsException) {
+            // The spec collapses both "unknown account" and "operation that
+            // cannot be fulfilled on it" (insufficient funds) into 404 0.
             return Response::json(404, self::NOT_FOUND);
         }
     }

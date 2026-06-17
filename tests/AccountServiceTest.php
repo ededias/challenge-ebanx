@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Ebanx\Tests;
 
 use Ebanx\Exception\AccountNotFoundException;
+use Ebanx\Exception\InsufficientFundsException;
 use Ebanx\Repository\InMemoryAccountRepository;
 use Ebanx\Service\AccountService;
 use PHPUnit\Framework\Attributes\Test;
@@ -69,6 +70,31 @@ final class AccountServiceTest extends TestCase
     }
 
     #[Test]
+    public function withdraw_down_to_exactly_zero_is_allowed(): void
+    {
+        $this->service->deposit('100', 20);
+
+        $result = $this->service->withdraw('100', 20);
+
+        self::assertSame(['origin' => ['id' => '100', 'balance' => 0]], $result);
+    }
+
+    #[Test]
+    public function withdraw_more_than_the_balance_is_rejected_and_leaves_state_untouched(): void
+    {
+        $this->service->deposit('100', 10);
+
+        try {
+            $this->service->withdraw('100', 20);
+            self::fail('Expected InsufficientFundsException');
+        } catch (InsufficientFundsException) {
+            // expected
+        }
+
+        self::assertSame(10, $this->service->getBalance('100'));
+    }
+
+    #[Test]
     public function transfer_moves_funds_and_creates_the_destination(): void
     {
         $this->service->deposit('100', 15);
@@ -81,6 +107,25 @@ final class AccountServiceTest extends TestCase
         ], $result);
         self::assertSame(0, $this->service->getBalance('100'));
         self::assertSame(15, $this->service->getBalance('300'));
+    }
+
+    #[Test]
+    public function transfer_with_insufficient_funds_is_atomic_and_changes_nothing(): void
+    {
+        $this->service->deposit('100', 10);
+
+        try {
+            $this->service->transfer('100', '300', 20);
+            self::fail('Expected InsufficientFundsException');
+        } catch (InsufficientFundsException) {
+            // expected
+        }
+
+        // Origin is not debited and the destination is never created: the failed
+        // transfer left no partial state behind.
+        self::assertSame(10, $this->service->getBalance('100'));
+        $this->expectException(AccountNotFoundException::class);
+        $this->service->getBalance('300');
     }
 
     #[Test]
